@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: pspd
+data:
+  AUTHORIZATION_SERVICE_URL: "http://authorization-service:8001"
+  ANTIFRAUD_SERVICE_URL: "http://antifraud-service:8002"
+  PAYMENT_GATEWAY_PORT: "8000"
+  DEFAULT_PROTOCOL: "rest"
+  ANTIFRAUD_REST_URL: "http://antifraud-service:8002"
+  AUTHORIZER_REST_URL: "http://authorization-service:8001"
+  ANTIFRAUD_GRPC_ADDR: "antifraud-service:50051"
+  AUTHORIZER_GRPC_ADDR: "authorization-service:50052"
+  GRPC_TIMEOUT: "5.0"
+  REST_TIMEOUT: "5.0"
+  LOG_LEVEL: "INFO"

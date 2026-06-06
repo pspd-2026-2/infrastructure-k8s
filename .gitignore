@@ -1,0 +1,10 @@
+# Arquivos locais sensíveis
+.env
+*.env
+
+# Secrets gerados localmente
+configs/app-secret.yaml
+
+# Arquivos temporários
+*.log
+.DS_Store

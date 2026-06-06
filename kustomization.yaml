@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Namespace
+  - manifests/workloads/00-namespace.yaml
+
+  # Configurações
+  - manifests/configs/app-config.yaml
+  - manifests/configs/payment-gateway-hpa.yaml
+
+  # Workloads e Services
+  - manifests/workloads/authorization-service.yaml
+  - manifests/workloads/antifraud-service.yaml
+  - manifests/workloads/payment-gateway.yaml
+  - manifests/workloads/frontend.yaml
+
+  # Ingress e NetworkPolicies
+  - manifests/networking/payment-gateway-ingress.yaml
+  - manifests/networking/frontend-ingress.yaml
+  - manifests/networking/00-default-deny-ingress.yaml
+  - manifests/networking/10-allow-ingress-to-payment-gateway.yaml
+  - manifests/networking/11-allow-ingress-to-frontend.yaml
+  - manifests/networking/20-allow-payment-gateway-to-internal-services.yaml
+  - manifests/networking/30-allow-frontend-to-payment-gateway.yaml

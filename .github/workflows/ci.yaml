@@ -1,0 +1,94 @@
+name: Kubernetes Infrastructure CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  syntax:
+    name: Syntax validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: |
+          pipx install yamllint
+
+      - name: YAML lint
+        run: |
+          yamllint .
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: ShellCheck scripts
+        run: |
+          find scripts -type f -name "*.sh" -print0 | xargs -0 shellcheck -e SC2016
+
+  kubernetes-schema:
+    name: Kubernetes schema validation
+    runs-on: ubuntu-latest
+    needs: syntax
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -L -o kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar -xzf kubeconform.tar.gz
+          sudo mv kubeconform /usr/local/bin/kubeconform
+
+      - name: Render manifests with Kustomize
+        run: |
+          kubectl kustomize . > rendered.yaml
+
+      - name: Validate Kubernetes schemas
+        run: |
+          kubeconform \
+            -strict \
+            -summary \
+            -kubernetes-version 1.33.1 \
+            -ignore-missing-schemas \
+            rendered.yaml
+
+  security-policy:
+    name: Security and best practices
+    runs-on: ubuntu-latest
+    needs: kubernetes-schema
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Render manifests with Kustomize
+        run: |
+          kubectl kustomize . > rendered.yaml
+
+      - name: Install Checkov
+        run: |
+          pipx install checkov
+
+      - name: Checkov Kubernetes scan
+        run: |
+          checkov \
+            -f rendered.yaml \
+            --framework kubernetes \
+            --soft-fail
+
+      - name: Trivy config scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "0"

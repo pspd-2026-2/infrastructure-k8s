@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: antifraud-service
+  namespace: pspd
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: antifraud-service
+  template:
+    metadata:
+      labels:
+        app: antifraud-service
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: antifraud-service
+          image: ghcr.io/pspd-2026-2/service-b-antifraud:latest
+          imagePullPolicy: Always
+          env:
+            - name: REST_PORT
+              value: "8002"
+            - name: GRPC_PORT
+              value: "50051"
+          ports:
+            - containerPort: 8002
+              name: http
+            - containerPort: 50051
+              name: grpc
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          readinessProbe:
+            tcpSocket:
+              port: 8002
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: antifraud-service
+  namespace: pspd
+spec:
+  type: ClusterIP
+  selector:
+    app: antifraud-service
+  ports:
+    - name: http
+      port: 8002
+      targetPort: 8002
+    - name: grpc
+      port: 50051
+      targetPort: 50051
