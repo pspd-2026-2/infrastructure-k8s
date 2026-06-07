@@ -57,7 +57,7 @@ spec:
     app: authorization-service
   ports:
     - name: http
-      port: 8001
+      port: 8002
       targetPort: 8081
     - name: grpc
       port: 50052

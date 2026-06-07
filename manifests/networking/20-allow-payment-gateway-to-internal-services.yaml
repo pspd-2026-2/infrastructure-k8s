@@ -16,7 +16,9 @@ spec:
               app: payment-gateway
       ports:
         - protocol: TCP
-          port: 8001
+          port: 8081   # targetPort do REST no Autorizador
+        - protocol: TCP
+          port: 50052  # targetPort do gRPC no Autorizador
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -36,6 +38,6 @@ spec:
               app: payment-gateway
       ports:
         - protocol: TCP
-          port: 8002
+          port: 8001   # targetPort do REST no Antifraude
         - protocol: TCP
-          port: 50051
+          port: 50051  # targetPort do gRPC no Antifraude

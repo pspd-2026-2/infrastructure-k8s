@@ -21,11 +21,11 @@ spec:
           imagePullPolicy: Always
           env:
             - name: REST_PORT
-              value: "8002"
+              value: "8001"
             - name: GRPC_PORT
               value: "50051"
           ports:
-            - containerPort: 8002
+            - containerPort: 8001
               name: http
             - containerPort: 50051
               name: grpc
@@ -38,14 +38,14 @@ spec:
               memory: "256Mi"
           readinessProbe:
             tcpSocket:
-              port: 8002
+              port: 8001
             initialDelaySeconds: 3
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
           livenessProbe:
             tcpSocket:
-              port: 8002
+              port: 8001
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 2
@@ -62,8 +62,8 @@ spec:
     app: antifraud-service
   ports:
     - name: http
-      port: 8002
-      targetPort: 8002
+      port: 8001
+      targetPort: 8001
     - name: grpc
       port: 50051
       targetPort: 50051
