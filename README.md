@@ -765,6 +765,78 @@ Para uma produção real, recomenda-se evoluir os seguintes pontos:
 - Configurar limites com base em métricas reais de carga.
 - Automatizar deploy via CI/CD.
 
+## Análise de performance gRPC vs REST e correção de balanceamento
+
+### Problema identificado
+
+Após o deploy no cluster observou-se que as chamadas **gRPC apresentavam latência maior que REST**, o oposto do esperado. A causa-raiz é a combinação de três fatores:
+
+1. **Service `ClusterIP` + gRPC HTTP/2:** o kube-proxy (iptables/IPVS) balanceia no nível L4, ou seja, por **conexão TCP**. O gateway Python abre **uma única conexão HTTP/2 persistente por serviço** — todas as RPCs são multiplexadas nessa conexão. O kube-proxy fixa essa conexão em **um dos 2 pods** (`replicas: 2`), deixando o outro ocioso.
+
+2. **REST usa pool de conexões HTTP/1.1:** o cliente httpx abre até 100 conexões (`REST_MAX_CONNECTIONS=100`). O kube-proxy distribui essas conexões entre os 2 pods, resultando em ~2× a capacidade de processamento.
+
+3. **Pod com CPU throttled:** cada pod tem `cpu: limit 500m`. O único pod ativo no gRPC atinge o throttle sob carga concorrente, enquanto o pod REST ocioso não contribui.
+
+Resultado: sob `CONCURRENCY=25`, o REST aproveitava 2 pods e o gRPC aproveitava apenas 1, invertendo o resultado esperado.
+
+### Correção aplicada
+
+**1. Services headless para gRPC** (`clusterIP: None`)
+
+Adicionados `antifraud-grpc-headless:50051` e `authorization-grpc-headless:50052`. Com headless, o DNS retorna os IPs individuais de **todos os pods**, em vez de um único IP virtual.
+
+**2. Canal gRPC com `dns:///` + `round_robin`**
+
+O gateway agora cria os canais com:
+```python
+grpc.aio.insecure_channel(f"dns:///{ANTIFRAUD_GRPC_ADDR}", options=[
+    ("grpc.lb_policy_name", "round_robin"),
+    ...
+])
+```
+O resolver `dns:///` enumera os IPs dos pods e o `round_robin` cria um **subcanal por pod**, distribuindo RPCs uniformemente.
+
+**3. Keepalive no canal gRPC**
+
+Parâmetros `keepalive_time_ms=10000` e `keepalive_timeout_ms=5000` evitam que conexões ociosas sejam derrubadas silenciosamente pelo conntrack do kernel, o que causaria latência de reconexão no próximo request.
+
+**4. Pré-aquecimento no startup do gateway**
+
+`grpc_client.warmup()` é chamado no `lifespan` do FastAPI antes de aceitar tráfego, eliminando a latência do handshake HTTP/2 na primeira requisição após deploy.
+
+**5. Health probes gRPC nativas**
+
+Os probes dos backends foram trocados de `tcpSocket` (que só valida que a porta está aberta) para o tipo `grpc` nativo do Kubernetes (≥ 1.24), que chama o protocolo `grpc.health.v1.Health/Check`. Os backends Go registram o health server padrão do gRPC. Isso garante que pods com gRPC degradado saiam da rotação.
+
+### Resultado esperado após a correção
+
+| Métrica | Antes (gRPC pinned) | Depois (round-robin) |
+|---|---|---|
+| Pods ativos por chamada gRPC | 1 de 2 | 2 de 2 |
+| CPU throttling sob carga | frequente | distribuído |
+| gRPC latência média vs REST | gRPC > REST | gRPC ≤ REST |
+
+### Como verificar
+
+```bash
+# 1. Aplicar manifests atualizados
+kubectl apply -k .
+
+# 2. Aguardar rollout
+kubectl rollout status deployment/antifraud-service -n pspd
+kubectl rollout status deployment/authorization-service -n pspd
+
+# 3. Confirmar que ambos os pods de cada backend recebem tráfego sob carga
+kubectl top pods -n pspd   # CPU deve aparecer em ambas as réplicas
+
+# 4. Benchmark gRPC vs REST
+cd ../gateway
+python scripts/perf_compare.py --n 100
+
+# 5. Teste funcional de regressão
+pytest tests/ -v
+```
+
 ## Estado atual da entrega
 
 A infraestrutura atual contempla:

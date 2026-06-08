@@ -32,15 +32,15 @@ spec:
               cpu: "500m"
               memory: "256Mi"
           readinessProbe:
-            tcpSocket:
-              port: 8081
+            grpc:
+              port: 50052
             initialDelaySeconds: 3
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
           livenessProbe:
-            tcpSocket:
-              port: 8081
+            grpc:
+              port: 50052
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 2
@@ -59,6 +59,21 @@ spec:
     - name: http
       port: 8002
       targetPort: 8081
+    - name: grpc
+      port: 50052
+      targetPort: 50052
+---
+# Headless service para balanceamento gRPC client-side (round-robin).
+apiVersion: v1
+kind: Service
+metadata:
+  name: authorization-grpc-headless
+  namespace: pspd
+spec:
+  clusterIP: None
+  selector:
+    app: authorization-service
+  ports:
     - name: grpc
       port: 50052
       targetPort: 50052

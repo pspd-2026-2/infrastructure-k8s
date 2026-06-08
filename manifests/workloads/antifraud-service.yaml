@@ -37,15 +37,15 @@ spec:
               cpu: "500m"
               memory: "256Mi"
           readinessProbe:
-            tcpSocket:
-              port: 8001
+            grpc:
+              port: 50051
             initialDelaySeconds: 3
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
           livenessProbe:
-            tcpSocket:
-              port: 8001
+            grpc:
+              port: 50051
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 2
@@ -64,6 +64,24 @@ spec:
     - name: http
       port: 8001
       targetPort: 8001
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+---
+# Headless service para balanceamento gRPC client-side (round-robin).
+# ClusterIP: None faz o DNS retornar os IPs de todos os pods individualmente,
+# permitindo que o canal grpc.aio crie um subcanal por pod ao invés de fixar
+# em um único endpoint de IP virtual.
+apiVersion: v1
+kind: Service
+metadata:
+  name: antifraud-grpc-headless
+  namespace: pspd
+spec:
+  clusterIP: None
+  selector:
+    app: antifraud-service
+  ports:
     - name: grpc
       port: 50051
       targetPort: 50051
