@@ -837,6 +837,63 @@ python scripts/perf_compare.py --n 100
 pytest tests/ -v
 ```
 
+### Fase 2 — Escalar gRPC sob concorrência
+
+**Problema residual após a fase 1:** com o pinning resolvido, o gRPC ainda degradava
+*relativamente* ao REST conforme a concorrência subia. Causas:
+
+- **Poucas conexões TCP:** com `round_robin` o gateway mantinha apenas 2 conexões gRPC
+  (1 por pod). O REST (httpx) abre até 100, distribuídas pelos pods. Sob alto paralelismo
+  as 2 conexões gRPC + o flow-control HTTP/2 compartilhado viram gargalo.
+- **1 event loop:** o gateway rodava com 1 processo uvicorn (`--workers` ausente).
+  Todo o overhead por-RPC do `grpc.aio` caía num único event loop, saturando primeiro
+  no caminho gRPC.
+
+**Correções aplicadas:**
+
+| Componente | Mudança | Efeito |
+|---|---|---|
+| `gateway/app/grpc_client.py` | Pool de 8 canais por serviço com `use_local_subchannel_pool` | 8× mais conexões TCP independentes por serviço |
+| `gateway/app/config.py` | `GRPC_CHANNEL_POOL_SIZE=8` configurável por env | Tunável sem rebuild |
+| `gateway/Dockerfile` | `--workers ${WEB_CONCURRENCY}` (default 4) | 4 processos com event loops e pools independentes |
+| `app-config.yaml` | `GRPC_CHANNEL_POOL_SIZE: "8"`, `WEB_CONCURRENCY: "4"` | Propagado ao pod via `envFrom` |
+
+**Por que `use_local_subchannel_pool` é crítico:** sem ele, múltiplos canais para o
+mesmo host compartilham o subchannel pool global do gRPC e colapsam nas mesmas
+conexões TCP — o pool seria um no-op.
+
+**Resultado esperado após a fase 2:**
+
+| Métrica | Fase 1 | Fase 2 |
+|---|---|---|
+| Conexões gRPC por pod backend | ~1 | ~`POOL × workers` = ~32 |
+| Event loops no gateway | 1 | 4 (workers) |
+| gRPC latência sob C=25 | gRPC > REST | gRPC ≤ REST |
+| gRPC throughput sob C=50 | degradado | sustentado |
+
+**Benchmark concorrente (novo `--concurrency`):**
+
+```bash
+cd ../gateway
+
+# Curva completa para o relatório
+python scripts/perf_compare.py --n 300 --concurrency 1,5,10,25,50
+
+# Antes vs depois num nível específico
+python scripts/perf_compare.py --n 200 --concurrency 25
+```
+
+**Verificar fan-out de conexões:**
+
+```bash
+# Deve mostrar ~POOL×workers conexões ativas no pod, não apenas 1-2
+kubectl exec -n pspd deploy/antifraud-service -- \
+  sh -c "netstat -an 2>/dev/null | grep :50051 | grep ESTABLISHED | wc -l"
+
+# Confirmar 4 workers no gateway
+kubectl logs -n pspd deploy/payment-gateway | grep "Started server process"
+```
+
 ## Estado atual da entrega
 
 A infraestrutura atual contempla:
