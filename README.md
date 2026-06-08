@@ -816,27 +816,6 @@ Os probes dos backends foram trocados de `tcpSocket` (que só valida que a porta
 | CPU throttling sob carga | frequente | distribuído |
 | gRPC latência média vs REST | gRPC > REST | gRPC ≤ REST |
 
-### Como verificar
-
-```bash
-# 1. Aplicar manifests atualizados
-kubectl apply -k .
-
-# 2. Aguardar rollout
-kubectl rollout status deployment/antifraud-service -n pspd
-kubectl rollout status deployment/authorization-service -n pspd
-
-# 3. Confirmar que ambos os pods de cada backend recebem tráfego sob carga
-kubectl top pods -n pspd   # CPU deve aparecer em ambas as réplicas
-
-# 4. Benchmark gRPC vs REST
-cd ../gateway
-python scripts/perf_compare.py --n 100
-
-# 5. Teste funcional de regressão
-pytest tests/ -v
-```
-
 ### Fase 2 — Escalar gRPC sob concorrência
 
 **Problema residual após a fase 1:** com o pinning resolvido, o gRPC ainda degradava
@@ -871,29 +850,6 @@ conexões TCP — o pool seria um no-op.
 | gRPC latência sob C=25 | gRPC > REST | gRPC ≤ REST |
 | gRPC throughput sob C=50 | degradado | sustentado |
 
-**Benchmark concorrente (novo `--concurrency`):**
-
-```bash
-cd ../gateway
-
-# Curva completa para o relatório
-python scripts/perf_compare.py --n 300 --concurrency 1,5,10,25,50
-
-# Antes vs depois num nível específico
-python scripts/perf_compare.py --n 200 --concurrency 25
-```
-
-**Verificar fan-out de conexões:**
-
-```bash
-# Deve mostrar ~POOL×workers conexões ativas no pod, não apenas 1-2
-kubectl exec -n pspd deploy/antifraud-service -- \
-  sh -c "netstat -an 2>/dev/null | grep :50051 | grep ESTABLISHED | wc -l"
-
-# Confirmar 4 workers no gateway
-kubectl logs -n pspd deploy/payment-gateway | grep "Started server process"
-```
-
 ## Estado atual da entrega
 
 A infraestrutura atual contempla:
@@ -918,5 +874,3 @@ A infraestrutura atual contempla:
 - Scripts de teste funcional, configuração, segurança, gRPC e carga.
 - Organização com Kustomize.
 - Operação automatizada com Makefile.
-
-Com isso, a infraestrutura da Pessoa 4 entrega uma base Kubernetes funcional, segura e reprodutível para executar os microserviços do sistema de análise de risco financeiro em ambiente local, com práticas compatíveis com um desenho profissional de implantação.
