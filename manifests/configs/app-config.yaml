@@ -17,3 +17,4 @@ data:
   LOG_LEVEL: "INFO"
   GRPC_CHANNEL_POOL_SIZE: "8"
   WEB_CONCURRENCY: "4"
+  REDIS_URL: "redis://redis:6379/0"

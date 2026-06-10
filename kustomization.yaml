@@ -14,6 +14,7 @@ resources:
   - manifests/workloads/antifraud-service.yaml
   - manifests/workloads/payment-gateway.yaml
   - manifests/workloads/frontend.yaml
+  - manifests/workloads/redis.yaml
 
   # Ingress e NetworkPolicies
   - manifests/networking/payment-gateway-ingress.yaml
@@ -23,3 +24,4 @@ resources:
   - manifests/networking/11-allow-ingress-to-frontend.yaml
   - manifests/networking/20-allow-payment-gateway-to-internal-services.yaml
   - manifests/networking/30-allow-frontend-to-payment-gateway.yaml
+  - manifests/networking/40-allow-payment-gateway-to-redis.yaml
